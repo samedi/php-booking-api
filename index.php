@@ -6,8 +6,8 @@ spl_autoload_register(function ($class) {
 
 const CLIENT_ID = "REPLACEME";
 $CLIENT_SECRET = "REPLACEME";
-$PRACTICE_ID = "REPLACEME"
-$REDIRECT_URI = "http://url-of-this/script.php"
+$PRACTICE_ID = "REPLACEME";
+$REDIRECT_URI = "http://url-of-this/script.php";
 
 
 
