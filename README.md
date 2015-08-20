@@ -6,8 +6,7 @@ appointment booking API using OAuth2.
 
 This code is by no means complete and not really tested but it took us only 2 hours to write. Feel free to use it as a basis for your own implementation.
 
-Github repository: https://github.com/samedi/php-booking-api
-API documentation: https://wiki.samedi.de/pages/viewpage.action?pageId=1343675
+For more information please consult the complete [API documentation](https://wiki.samedi.de/display/doc/Booking+API)
 
 Contributing
 ============
