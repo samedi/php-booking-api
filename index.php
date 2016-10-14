@@ -1,15 +1,24 @@
 <?php
 
-spl_autoload_register(function ($class) {
-    require 'oauth_2.0_client_php/' . str_replace('\\', DIRECTORY_SEPARATOR, $class) . '.php';
+define('__ROOT__',dirname(__FILE__));
+
+require_once(str_replace('\\', DIRECTORY_SEPARATOR, __ROOT__.'\Requests-1.6.0\library\Requests.php'));
+
+
+spl_autoload_register( function($class){
+    if(file_exists('oauth_2.0_client_php/' . str_replace('\\', DIRECTORY_SEPARATOR, $class) . '.php')) {
+        require 'oauth_2.0_client_php/' . str_replace('\\', DIRECTORY_SEPARATOR, $class) . '.php';
+    }
+    else
+    {
+        Requests::register_autoloader();
+    }   
 });
 
 $client_id = "REPLACEME";
 $client_secret = "REPLACEME";
 $practice_id = "REPLACEME";
-$redirect_uri = "http://REPLACEME/index.php";
-
-
+$redirect_uri = "REPLACEME";
 
 $base_uri = "https://patient.samedi.de";
 
@@ -43,6 +52,17 @@ if (isset($_GET['action'])) {
             // calls api endpoint with access token
             $categories = json_decode($service->callApiEndpoint($base_uri . "/api/booking/v3/event_categories.json?practice_id=${practice_id}&client_id=" . $client_id))->data;
             break;
+        case 'courses-without-oauth':
+            // calls api endpoint with access token
+            $headers = array('Accept' => 'application/json');
+            $courses_without_oauth = Requests::get($base_uri . "/api/booking/v3/courses.json?practice_id=${practice_id}&client_id=" . $client_id, $headers);
+            $courses_wo = json_decode($courses_without_oauth->body)->data;
+            break;
+        case 'courses-with-oauth':
+            // calls api endpoint with access token
+            $courses_with_oauth = json_decode($service->callApiEndpoint($base_uri . "/api/booking/v3/courses.json?practice_id=${practice_id}&client_id=" . $client_id))->data;
+            break;
+            
         case 'eventTypes':
             // calls api endpoint with access token
             $eventTypes = json_decode($service->callApiEndpoint($base_uri . "/api/booking/v3/event_types.json?practice_id=${practice_id}&client_id=" . $client_id . '&event_category_id='.$_GET["category_id"]))->data;
@@ -74,7 +94,30 @@ if (isset($_GET['action'])) {
                     'token'             => $_GET['token']
                 )
             ));
+            break;
 
+        case 'book-course-with-oauth':
+            $result = json_decode($service->callApiEndpoint(
+                $base_uri . "/api/booking/v3/courses/" . $_GET['course_id'] . "/participation?",
+                "POST",
+                array(),
+                array()
+            ));
+            break;
+
+        case 'book-course':
+            $result = json_decode(Requests::post(
+                $base_uri . "/api/booking/v3/courses/" . $_GET['course_id'] . "/participation?practice_id=${practice_id}&client_id=" . $client_id, array(),
+                    array(
+                    'attendant' => array(
+                        'data' => array(
+                            'last_name' => $_GET["last_name"],
+                            'first_name' => $_GET["first_name"],
+                            'email' => $_GET["email"]
+                                )
+                            )
+                        ))->body);
+                print_r($result);
             break;
 
     }
@@ -107,12 +150,53 @@ $token = $dataStore->retrieveAccessToken();
         <a href="?action=categories" >fetch categories</a><br />
         <?php } ?>
 
+        <?php if (isset($userInfo)) { ?>
+        <a href="?action=courses-with-oauth">fetch courses with oauth</a><br />
+        <?php } ?>
+
         <?php if (isset($categories)) { ?>
             <?php foreach ($categories as $category) { ?>
                 <a href="?action=eventTypes&category_id=<?= $category->id ?>"><?= $category->name ?></a><br/>
             <?php } ?>
         <?php } ?>
+        
+        <a href="?action=courses-without-oauth" >fetch courses without oauth</a><br /><br />
+        
+        <?php if (isset($courses_wo)) 
+            { ?>
+            <form action="index.php" method="get">
+                
+                Last Name:  <input type="text" name="last_name"/><br />
+                First Name: <input type="text" name="first_name"/><br />
+                E-Mail: <input type="text" name="email"/><br /><br />
+                <?php foreach ($courses_wo as $course) { ?>
+                    <input type="radio" name="course_id" value="<?= $course->id ?>"><?=$course->name?></input> 
+                    <p>the course <?= $course->name ?> has <?= $course->open_positions ?> of <?= $course->maximum_participants ?> slots available</p>
+                        <?php foreach ($course->appointments as $appointment) { ?>
+                            <p><?= $appointment->starts_at ?></p>
+                        <?php } ?>
+                    <?php } ?>
+                    <input type="hidden" name="action" value="book-course">
+                    <input type="submit" value="book selected course">
+                </form>
+            <?php } ?>
 
+        <?php if (isset($courses_with_oauth)) 
+            { ?>
+            <form action="index.php" method="get">
+                <?php foreach ($courses_with_oauth as $course) { ?>
+                    <input type="radio" name="course_id" value="<?= $course->id ?>"><?=$course->name?></input> 
+                    <p>the course <?= $course->name ?> has <?= $course->open_positions ?> of <?= $course->maximum_participants ?> slots available</p>
+                        <?php foreach ($course->appointments as $appointment) { ?>
+                            <p><?= $appointment->starts_at ?></p>
+                        <?php } ?>
+                    <?php } ?>
+                    <input type="hidden" name="action" value="book-course-with-oauth">
+                    <input type="submit" value="book selected course with OAuth">
+                </form>
+            <?php } ?>
+
+        
         <?php if (isset($eventTypes)) { ?>
             <?php foreach ($eventTypes as $eventType) { ?>
                 <a href="?action=times&category_id=<?= $_GET['category_id'] ?>&event_type_id=<?= $eventType->id ?>"><?= $eventType->name ?></a><br/>
@@ -142,11 +226,15 @@ $token = $dataStore->retrieveAccessToken();
 
             <?php if (isset($result->error)) { ?>
             Fehler: <?= $result->error ?>
-            <?php } else { ?>
-            Termin gebucht!<br/>
-            Termin-Info: <?= $result->data->name ?> <?= $result->data->starts_at ?><br/>
-            <?php } ?>
-        <?php } ?>
+            <?php } else { 
+                        if (!array_key_exists ( 'success' , $result )) { ?>
+                            Termin gebucht!<br/>
+                            Termin-Info: <?= $result->data->name ?> <?= $result->data->starts_at ?><br/>
+                            <?php       } else { ?>
+                            Kurs wurde erfolgreich gebucht
+                            <?php }
+                    }
+                } ?>
 
     </body>
 </html>
